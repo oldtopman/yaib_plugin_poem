@@ -216,7 +216,7 @@ class Plugin(BasePlugin):
             self.reply(
                 channel,
                 nick,
-                'Could not find haiku with that deletion key :('
+                'Could not find limerick with that deletion key :('
             )
 
     def admin_allpoems(self, user, nick, channel, rest):
