@@ -1,7 +1,7 @@
 """
-Limericks and Haiku
+Limericks, Tanka, and Haiku
 
-Save and randomly display haiku and limericks. Includes some very light
+Save and randomly display haiku, tanka, and limericks. Includes some very light
 management tools for cleaning up terrible entries or correcting submission
 mistakes.
 """
@@ -156,6 +156,105 @@ class Plugin(BasePlugin):
                 'Could not find haiku with that deletion key :('
             )
 
+    def get_random_poem(self, poem_type='tanka', contains=None, by=None):
+        with self.getDbSession() as db_session:
+            query = db_session.query(Poem).filter(
+                Poem.poem_type == poem_type
+            ).order_by(
+                Poem.last_served
+            )
+
+            if contains is not None:
+                query = query.filter(
+                    Poem.content.like('%{}%'.format(contains))
+                )
+
+            if by is not None:
+                query = query.filter(Poem.submitted_by == by)
+
+            poems = query.limit(5).all()
+
+            if len(poems) == 0:
+                return 'No matching {} found. Submit one!'.format(poem_type)
+
+            poem = random.choice(poems)
+
+            # update poem
+            poem.times_served += 1
+            poem.last_served = datetime.datetime.now()
+            db_session.add(poem)
+
+            # save in list of recently displayed poems
+            if poem.id not in self.recent_poem_ids:
+                self.recent_poem_ids.append(poem.id)
+                self.recent_poem_ids = (
+                    self.recent_poem_ids[-RECENT_POEM_LIMIT:]
+                )
+
+            return poem.get_display_message()
+
+    def command_tanka(self, user, nick, channel, rest):
+        """Display a random tanka."""
+
+        if rest != '':
+            content = rest.strip()
+            lines = content.split('/')
+            if len(lines) != 5:
+                self.reply(
+                    channel,
+                    nick,
+                    'Tanka are 5 lines! Separate lines with /'
+                )
+                return
+
+            deletion_key = self.save_poem('tanka', nick, content)
+            self.reply(channel, nick, 'Tanka Saved!')
+
+            if channel != nick and deletion_key:
+                self.send(
+                    nick,
+                    'You can delete this tanka with /msg {} '
+                    'deletetanka {}'.format(
+                        self.nick,
+                        deletion_key
+                    )
+                )
+            return
+
+        self.reply(
+            channel,
+            nick,
+            self.get_random_poem(poem_type='tanka')
+        )
+
+    def command_tankawith(self, user, nick, channel, rest):
+        """Display a random tanka with the given text"""
+        self.reply(
+            channel,
+            nick,
+            self.get_random_poem(poem_type='tanka', contains=rest)
+        )
+
+    def command_tankaby(self, user, nick, channel, rest):
+        """Display a random tanka submitted by the given nick"""
+        self.reply(
+            channel,
+            nick,
+            self.get_random_poem(poem_type='tanka', by=rest)
+        )
+
+    def command_deletetanka(self, user, nick, channel, rest):
+        """Delete a tanka using the deletion key."""
+        deleted = self.delete_poem('tanka', rest.strip())
+        if deleted:
+            self.reply(channel, nick, 'Deleted Tanka!')
+        else:
+            self.reply(
+                channel,
+                nick,
+                'Could not find tanka with that deletion key :('
+            )
+
     def command_limerick(self, user, nick, channel, rest):
         """Saves the given limerick or display a random one if no
         additional parameters given.
@@ -216,7 +315,7 @@ class Plugin(BasePlugin):
             self.reply(
                 channel,
                 nick,
-                'Could not find limerick with that deletion key :('
+                'Could not find haiku with that deletion key :('
             )
 
     def admin_allpoems(self, user, nick, channel, rest):
